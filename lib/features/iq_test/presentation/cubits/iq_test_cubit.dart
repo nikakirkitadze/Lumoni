@@ -57,8 +57,10 @@ class IQTestCubit extends Cubit<IQTestState> {
         }
       }
 
-      // Load all available questions
-      final allQuestions = await _repository.getQuestions();
+      // Load all available questions (hybrid AI+local for premium users)
+      final allQuestions = await _repository.getHybridQuestions(
+        isPremium: isPremium,
+      );
 
       if (allQuestions.isEmpty) {
         emit(const IQTestError(

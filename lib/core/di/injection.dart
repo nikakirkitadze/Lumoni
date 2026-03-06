@@ -1,5 +1,6 @@
 import 'package:get_it/get_it.dart';
 
+import 'package:lumoni/core/services/ai_question_service.dart';
 import 'package:lumoni/core/services/auth_service.dart';
 import 'package:lumoni/core/services/firebase_service.dart';
 import 'package:lumoni/core/services/firestore_service.dart';
@@ -35,9 +36,17 @@ Future<void> configureDependencies() async {
   // RevenueCat subscription management.
   getIt.registerLazySingleton<SubscriptionService>(() => SubscriptionService());
 
+  // ─────────────────────── AI Services ───────────────────────────────
+
+  getIt.registerLazySingleton<AIQuestionService>(
+    () => AIQuestionService(localStorage: getIt<LocalStorageService>()),
+  );
+
   // ─────────────────────── Repositories ──────────────────────────────
 
-  getIt.registerLazySingleton<IQTestRepository>(() => IQTestRepository());
+  getIt.registerLazySingleton<IQTestRepository>(
+    () => IQTestRepository(aiService: getIt<AIQuestionService>()),
+  );
   getIt.registerLazySingleton<EQTestRepository>(() => EQTestRepository());
 
   // ─────────────────────── Utilities (singletons) ──────────────────────

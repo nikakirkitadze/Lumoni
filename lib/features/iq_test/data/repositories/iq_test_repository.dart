@@ -5,6 +5,7 @@ import 'package:lumoni/core/constants/app_constants.dart';
 import 'package:lumoni/core/di/injection.dart';
 import 'package:lumoni/core/models/iq_question_model.dart';
 import 'package:lumoni/core/models/test_session_model.dart';
+import 'package:lumoni/core/services/ai_question_service.dart';
 import 'package:lumoni/core/services/local_storage_service.dart';
 import 'package:lumoni/features/iq_test/data/datasources/iq_question_bank.dart';
 
@@ -13,15 +14,20 @@ import 'package:lumoni/features/iq_test/data/datasources/iq_question_bank.dart';
 ///
 /// Primarily sources questions from the local [IQQuestionBank] and falls
 /// back to Firestore when the local bank is unavailable or empty.
+/// For premium users, can also source AI-generated questions via
+/// [AIQuestionService].
 class IQTestRepository {
   IQTestRepository({
     LocalStorageService? localStorage,
     FirebaseFirestore? firestore,
+    AIQuestionService? aiService,
   })  : _localStorage = localStorage ?? getIt<LocalStorageService>(),
-        _firestore = firestore ?? FirebaseFirestore.instance;
+        _firestore = firestore ?? FirebaseFirestore.instance,
+        _aiService = aiService;
 
   final LocalStorageService _localStorage;
   final FirebaseFirestore _firestore;
+  final AIQuestionService? _aiService;
 
   /// Cached questions to avoid re-parsing on every call.
   List<IQQuestionModel>? _cachedQuestions;
@@ -87,6 +93,58 @@ class IQTestRepository {
       int difficulty) async {
     final all = await getQuestions();
     return all.where((q) => q.difficulty == difficulty).toList();
+  }
+
+  // ──────────────────────── Hybrid (AI + Local) Loading ─────────────────────
+
+  /// Returns a combined pool of AI-generated and local questions.
+  ///
+  /// For premium users with an available [AIQuestionService], fetches
+  /// AI questions across all categories and merges them with the local bank.
+  /// The [QuestionRandomizer] handles final selection from this pool.
+  ///
+  /// Falls back to 100% local questions if AI generation fails or the
+  /// user is not premium.
+  Future<List<IQQuestionModel>> getHybridQuestions({
+    required bool isPremium,
+  }) async {
+    final aiService = _aiService;
+
+    // Non-premium or no AI service -> existing behavior
+    if (!isPremium || aiService == null) {
+      return getQuestions();
+    }
+
+    final aiTarget = (AppConstants.maxIQQuestions * AppConstants.aiQuestionRatio)
+        .round();
+    final perCategory =
+        (aiTarget / AppConstants.iqCategories.length).ceil(); // ~3 per category
+
+    final recentIds = _localStorage.getRecentQuestionIds();
+    final aiQuestions = <IQQuestionModel>[];
+
+    // Generate AI questions across all categories
+    for (final category in AppConstants.iqCategories) {
+      final generated = await aiService.generateQuestions(
+        category: category,
+        difficulty: 3, // mid-level; QuestionRandomizer handles final distribution
+        count: perCategory,
+        excludeIds: recentIds,
+      );
+      aiQuestions.addAll(generated);
+    }
+
+    if (aiQuestions.isNotEmpty) {
+      debugPrint(
+        '[IQTestRepository] Hybrid pool: ${aiQuestions.length} AI + local questions.',
+      );
+    }
+
+    // Always load local questions as well
+    final localQuestions = await getQuestions();
+
+    // Combine into a single pool (QuestionRandomizer selects from this)
+    return [...aiQuestions, ...localQuestions];
   }
 
   // ──────────────────────── Session Persistence ─────────────────────────────

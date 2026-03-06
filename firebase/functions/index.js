@@ -10,6 +10,7 @@ const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
+const { VertexAI } = require("@google-cloud/vertexai");
 
 initializeApp();
 const db = getFirestore();
@@ -310,6 +311,247 @@ function _shuffle(arr) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 1b. generateAIQuestions - HTTP Callable Function (Gemini-powered)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Category-specific system prompts for Gemini.
+ */
+const AI_CATEGORY_PROMPTS = {
+  pattern:
+    "You are an IQ test question generator specializing in number sequence and pattern recognition. " +
+    "Generate novel questions that test the ability to identify mathematical patterns, sequences, and rules. " +
+    "Each question must present a sequence with a missing element. The pattern must be unambiguous with exactly one correct answer. " +
+    "Include: arithmetic/geometric sequences, polynomial sequences, Fibonacci variants, square/cube patterns, alternating operations.",
+
+  logical:
+    "You are an IQ test question generator specializing in logical reasoning. " +
+    "Generate questions that test deductive and inductive logic. " +
+    "Include: syllogisms, conditional reasoning (if-then), set relationships, analogical reasoning, and logical deduction. " +
+    "Each question must have exactly one logically defensible correct answer.",
+
+  math:
+    "You are an IQ test question generator specializing in mathematical reasoning (not pure calculation). " +
+    "Generate questions that test mathematical thinking. " +
+    "Include: number properties, ratio/proportion problems, algebraic reasoning, probability intuition, geometric relationships. " +
+    "Questions should test reasoning, not arithmetic speed.",
+
+  verbal:
+    "You are an IQ test question generator specializing in verbal reasoning. " +
+    "Generate questions for adult English speakers. " +
+    "Include: word analogies (A:B :: C:?), odd-one-out from word groups, synonym/antonym identification, sentence completion, verbal classification. " +
+    "Use clear, unambiguous vocabulary.",
+
+  spatial:
+    "You are an IQ test question generator specializing in spatial reasoning expressed in text (no images). " +
+    "Generate questions that test spatial thinking. " +
+    "Include: mental rotation descriptions, 3D object properties (faces/edges/vertices), paper folding, cube net problems, shape transformations. " +
+    "Questions must be solvable from text alone.",
+};
+
+/**
+ * Generates AI-powered IQ questions using Vertex AI (Gemini).
+ *
+ * @param {string} data.category - IQ category (pattern, logical, math, verbal, spatial)
+ * @param {number} data.difficulty - Difficulty level 1-5
+ * @param {number} data.count - Number of questions to generate (max 10)
+ * @param {string[]} data.excludeIds - Question IDs to avoid
+ * @returns {{ success: boolean, questions: Object[] }}
+ */
+exports.generateAIQuestions = onCall(
+  { maxInstances: 20, region: "us-central1", timeoutSeconds: 60 },
+  async (request) => {
+    // Auth check
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "User must be authenticated.");
+    }
+
+    const userId = request.auth.uid;
+    const category = request.data.category;
+    const difficulty = Math.max(1, Math.min(5, request.data.difficulty || 3));
+    const count = Math.max(1, Math.min(10, request.data.count || 5));
+    const excludeIds = new Set(request.data.excludeIds || []);
+
+    // Validate category
+    if (!IQ_CATEGORIES.includes(category)) {
+      return { success: false, error: "Invalid category." };
+    }
+
+    try {
+      // ── Rate limit: max 10 calls per user per hour ────────────────────
+      const oneHourAgo = Timestamp.fromDate(
+        new Date(Date.now() - 60 * 60 * 1000)
+      );
+      const rateSnap = await db
+        .collection("ai_generation_log")
+        .where("userId", "==", userId)
+        .where("timestamp", ">=", oneHourAgo)
+        .count()
+        .get();
+
+      if ((rateSnap.data().count || 0) >= 10) {
+        return { success: false, error: "Rate limit exceeded." };
+      }
+
+      // Log this request
+      await db.collection("ai_generation_log").add({
+        userId,
+        category,
+        difficulty,
+        timestamp: Timestamp.now(),
+      });
+
+      // ── Check Firestore cache for existing AI questions ───────────────
+      const cacheSnap = await db
+        .collection("ai_generated_questions")
+        .where("category", "==", category)
+        .where("difficulty", "==", difficulty)
+        .limit(count + excludeIds.size)
+        .get();
+
+      const cachedQuestions = cacheSnap.docs
+        .filter((doc) => !excludeIds.has(doc.id))
+        .map((doc) => ({ id: doc.id, ...doc.data() }));
+
+      if (cachedQuestions.length >= count) {
+        _shuffle(cachedQuestions);
+        return {
+          success: true,
+          questions: cachedQuestions.slice(0, count),
+        };
+      }
+
+      // ── Generate via Gemini ───────────────────────────────────────────
+      const vertexAI = new VertexAI({
+        project: process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT,
+        location: "us-central1",
+      });
+
+      const model = vertexAI.getGenerativeModel({
+        model: "gemini-2.0-flash",
+        generationConfig: {
+          temperature: 0.8,
+          maxOutputTokens: 4096,
+          responseMimeType: "application/json",
+        },
+      });
+
+      const systemPrompt = AI_CATEGORY_PROMPTS[category];
+      const userPrompt =
+        `Generate ${count} IQ test questions at difficulty level ${difficulty}/5.\n\n` +
+        "Difficulty guidelines:\n" +
+        "- Level 1: Straightforward, recognizable patterns\n" +
+        "- Level 2: Requires one logical step\n" +
+        "- Level 3: Requires 2 steps or less common patterns\n" +
+        "- Level 4: Multi-step reasoning, uncommon patterns\n" +
+        "- Level 5: Complex, multi-layered reasoning\n\n" +
+        "Return a JSON array. Each element must have exactly these fields:\n" +
+        '{\n  "question": "The question text",\n' +
+        '  "answers": ["option1", "option2", "option3", "option4"],\n' +
+        '  "correctAnswerIndex": 0,\n' +
+        `  "difficulty": ${difficulty},\n` +
+        `  "category": "${category}",\n` +
+        '  "explanation": "Clear explanation of why the answer is correct"\n}\n\n' +
+        "RULES:\n" +
+        "1. Exactly 4 answer options per question\n" +
+        "2. Exactly one correct answer per question\n" +
+        "3. Wrong answers must be plausible but definitively incorrect\n" +
+        "4. The correct answer must be unambiguously right\n" +
+        "5. No duplicate questions\n" +
+        "6. No questions requiring images\n" +
+        "7. Verify your answer is correct before including the question";
+
+      const result = await model.generateContent({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      });
+
+      const responseText =
+        result.response?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (!responseText) {
+        console.warn("[generateAIQuestions] Empty Gemini response.");
+        return { success: false, error: "Empty AI response." };
+      }
+
+      // ── Parse and validate ────────────────────────────────────────────
+      let parsed;
+      try {
+        parsed = JSON.parse(responseText);
+        if (!Array.isArray(parsed)) parsed = [parsed];
+      } catch (parseErr) {
+        console.warn("[generateAIQuestions] JSON parse error:", parseErr.message);
+        return { success: false, error: "Invalid AI response format." };
+      }
+
+      const validQuestions = [];
+      for (const raw of parsed) {
+        const validated = _validateAIQuestion(raw, category, difficulty);
+        if (validated) {
+          validQuestions.push(validated);
+        }
+      }
+
+      if (validQuestions.length === 0) {
+        console.warn("[generateAIQuestions] No valid questions after validation.");
+        return { success: false, error: "No valid questions generated." };
+      }
+
+      // ── Store in Firestore cache ──────────────────────────────────────
+      const batch = db.batch();
+      for (const q of validQuestions) {
+        const docRef = db.collection("ai_generated_questions").doc(q.id);
+        batch.set(docRef, {
+          ...q,
+          generatedAt: Timestamp.now(),
+          generatedFor: userId,
+        });
+      }
+      await batch.commit();
+
+      return {
+        success: true,
+        questions: validQuestions,
+      };
+    } catch (error) {
+      console.error("[generateAIQuestions] Error:", error);
+      return { success: false, error: "AI generation failed." };
+    }
+  }
+);
+
+/**
+ * Validates a single AI-generated question object.
+ * Returns the validated object with a unique ID, or null if invalid.
+ */
+function _validateAIQuestion(raw, expectedCategory, expectedDifficulty) {
+  try {
+    if (!raw || typeof raw !== "object") return null;
+    if (typeof raw.question !== "string" || raw.question.length < 10) return null;
+    if (!Array.isArray(raw.answers) || raw.answers.length !== 4) return null;
+    if (raw.answers.some((a) => typeof a !== "string" || a.trim() === "")) return null;
+    if (new Set(raw.answers).size !== 4) return null; // no duplicate answers
+    if (typeof raw.correctAnswerIndex !== "number") return null;
+    if (raw.correctAnswerIndex < 0 || raw.correctAnswerIndex > 3) return null;
+    if (typeof raw.explanation !== "string") return null;
+
+    const suffix = Math.random().toString(36).substring(2, 8);
+    return {
+      id: `ai_${expectedCategory}_${Date.now()}_${suffix}`,
+      question: raw.question,
+      answers: raw.answers,
+      correctAnswerIndex: raw.correctAnswerIndex,
+      difficulty: expectedDifficulty,
+      category: expectedCategory,
+      explanation: raw.explanation || "",
+      isAIGenerated: true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 2. calculateAndSaveResults - Firestore Trigger
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -356,10 +598,15 @@ exports.calculateAndSaveResults = onDocumentWritten(
  * Processes and scores a completed IQ test session.
  */
 async function _processIQResult(sessionId, userId, questionIds, answers, timeSpentSeconds) {
-  // Fetch all questions for this session
+  // Fetch all questions for this session (from iq_questions or ai_generated_questions)
   const questions = [];
   for (const qId of questionIds) {
-    const qDoc = await db.collection(COLLECTIONS.iqQuestions).doc(qId).get();
+    // Try standard collection first
+    let qDoc = await db.collection(COLLECTIONS.iqQuestions).doc(qId).get();
+    // If not found and ID starts with "ai_", check AI collection
+    if (!qDoc.exists && qId.startsWith("ai_")) {
+      qDoc = await db.collection("ai_generated_questions").doc(qId).get();
+    }
     if (qDoc.exists) {
       questions.push({ id: qDoc.id, ...qDoc.data() });
     }

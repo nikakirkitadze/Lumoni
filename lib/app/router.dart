@@ -29,6 +29,8 @@ import 'package:lumoni/features/profile/presentation/cubits/profile_cubit.dart';
 import 'package:lumoni/features/profile/presentation/pages/profile_page.dart';
 import 'package:lumoni/features/results/presentation/cubits/results_cubit.dart';
 import 'package:lumoni/features/results/presentation/pages/results_page.dart';
+import 'package:lumoni/features/share_card/presentation/cubits/share_card_cubit.dart';
+import 'package:lumoni/features/share_card/presentation/pages/share_card_builder_page.dart';
 
 // ─── Route paths ───────────────────────────────────────────────────────────
 
@@ -46,6 +48,7 @@ abstract final class RoutePaths {
   static const String eqTest = '/eq-test';
   static const String results = '/results/:sessionId';
   static const String paywall = '/paywall';
+  static const String shareCard = '/share-card/:sessionId';
 }
 
 /// The global GoRouter configuration for the Lumoni app.
@@ -182,6 +185,21 @@ final GoRouter appRouter = GoRouter(
           child: BlocProvider(
             create: (_) => ResultsCubit()..loadResults(sessionId),
             child: ResultsPage(sessionId: sessionId),
+          ),
+        );
+      },
+    ),
+
+    // ── Share Card ──────────────────────────────────────────────────────
+    GoRoute(
+      path: RoutePaths.shareCard,
+      pageBuilder: (context, state) {
+        final sessionId = state.pathParameters['sessionId'] ?? '';
+        return _slideTransitionPage(
+          key: state.pageKey,
+          child: BlocProvider(
+            create: (_) => ShareCardCubit()..loadSession(sessionId),
+            child: const ShareCardBuilderPage(),
           ),
         );
       },

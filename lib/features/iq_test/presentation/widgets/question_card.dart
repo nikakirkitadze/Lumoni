@@ -56,6 +56,28 @@ class QuestionCard extends StatelessWidget {
                 ),
               ),
             ),
+            // AI badge (shown for AI-generated questions)
+            if (question.isAIGenerated) ...[
+              const SizedBox(width: AppSpacing.xxs),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  gradient: AppColors.primaryGradient,
+                  borderRadius: AppSpacing.borderRadiusFull,
+                ),
+                child: Text(
+                  'AI',
+                  style: AppTypography.captionSmall.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 9,
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(width: AppSpacing.xs),
 
             // Category chip

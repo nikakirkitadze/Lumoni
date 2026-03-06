@@ -513,11 +513,22 @@ class _ResultsPageState extends State<ResultsPage>
                     ),
                     child: Column(
                       children: [
-                        // Share button.
+                        // Create share card button.
                         AppButton(
-                          label: 'Share Results',
-                          icon: Icons.share_rounded,
+                          label: 'Create Share Card',
+                          icon: Icons.auto_awesome_rounded,
                           variant: AppButtonVariant.primary,
+                          onPressed: () {
+                            context.push('/share-card/${widget.sessionId}');
+                          },
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+
+                        // Share text button.
+                        AppButton(
+                          label: 'Share as Text',
+                          icon: Icons.share_rounded,
+                          variant: AppButtonVariant.outlined,
                           onPressed: () {
                             context.read<ResultsCubit>().shareResults();
                           },

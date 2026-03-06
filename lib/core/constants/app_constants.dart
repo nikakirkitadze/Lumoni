@@ -199,6 +199,29 @@ abstract final class AppConstants {
   static const String yearlyProductId = 'yearly';
   static const String lifetimeProductId = 'lumoni_pro_lifetime';
 
+  // ──────────────────────── AI Question Generation ────────────────────
+  /// Fraction of questions to source from AI for premium users.
+  static const double aiQuestionRatio = 0.5;
+
+  /// Timeout for AI generation Cloud Function call in seconds.
+  static const int aiGenerationTimeoutSeconds = 30;
+
+  /// Firestore collection for cached AI-generated questions.
+  static const String aiQuestionsCollection = 'ai_generated_questions';
+
+  /// Hive cache key for locally cached AI questions.
+  static const String keyAIQuestionCache = 'ai_question_cache';
+
+  // ──────────────────────── Share Cards ───────────────────────────────
+  /// Number of free share card styles available.
+  static const int freeShareCardStyles = 2;
+
+  /// Default image quality for exported share card images (0-100).
+  static const int shareCardExportQuality = 95;
+
+  /// Pixel ratio for high-res export (3x is good for social media).
+  static const double shareCardPixelRatio = 3.0;
+
   // ──────────────────────── Animation Durations ────────────────────────
   static const Duration animationFast = Duration(milliseconds: 200);
   static const Duration animationNormal = Duration(milliseconds: 350);
