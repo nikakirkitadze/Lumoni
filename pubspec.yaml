@@ -1,0 +1,96 @@
+name: lumoni
+description: "Lumoni - Premium Intelligence Platform"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # State Management
+  flutter_bloc: ^9.1.0
+  equatable: ^2.0.7
+
+  # Navigation
+  go_router: ^14.8.1
+
+  # Dependency Injection
+  get_it: ^8.0.3
+  injectable: ^2.5.0
+
+  # Firebase
+  firebase_core: ^3.13.0
+  firebase_auth: ^5.5.3
+  cloud_firestore: ^5.6.7
+  firebase_analytics: ^11.5.3
+  firebase_crashlytics: ^4.3.5
+
+  # Auth providers
+  google_sign_in: ^6.2.2
+  sign_in_with_apple: ^6.1.4
+
+  # Local Storage
+  hive_flutter: ^1.1.0
+  hive: ^2.2.3
+
+  # RevenueCat
+  purchases_flutter: ^8.5.1
+
+  # UI & Design
+  google_fonts: ^6.2.1
+  flutter_svg: ^2.0.17
+  shimmer: ^3.0.0
+  fl_chart: ^0.70.2
+  percent_indicator: ^4.2.5
+  smooth_page_indicator: ^1.2.1
+  cached_network_image: ^3.4.1
+  lottie: ^3.3.1
+
+  # Crypto
+  crypto: ^3.0.6
+
+  # Deep Links
+  app_links: ^6.4.0
+
+  # Utils
+  intl: ^0.20.2
+  uuid: ^4.5.1
+  share_plus: ^10.1.4
+  url_launcher: ^6.3.1
+  package_info_plus: ^8.1.3
+  connectivity_plus: ^6.1.4
+  purchases_ui_flutter: ^8.11.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  hive_generator: ^2.0.1
+  build_runner: ^2.4.13
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/icons/
+    - assets/animations/
+
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Inter-ExtraBold.ttf
+          weight: 800

@@ -1,0 +1,156 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─────────────────────── Helper Functions ───────────────────────────────
+
+    /// Returns true if the request is made by an authenticated user.
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    /// Returns true if the authenticated user's UID matches the given userId.
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    /// Returns true if the request is from an admin (custom claim).
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.admin == true;
+    }
+
+    /// Returns true if the request comes from a Firebase Cloud Function
+    /// (using the Admin SDK, which bypasses security rules).
+    /// Note: Admin SDK requests bypass rules entirely, so this is for
+    /// documentation clarity only.
+
+    /// Validates that all required fields are present in the incoming data.
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    /// Validates that a string field is non-empty and within max length.
+    function isValidString(field, maxLen) {
+      return request.resource.data[field] is string
+        && request.resource.data[field].size() > 0
+        && request.resource.data[field].size() <= maxLen;
+    }
+
+    /// Validates that a number field is within the given range.
+    function isInRange(field, min, max) {
+      return request.resource.data[field] is number
+        && request.resource.data[field] >= min
+        && request.resource.data[field] <= max;
+    }
+
+    // ─────────────────────── Users Collection ──────────────────────────────
+
+    match /users/{userId} {
+      // Users can read and write only their own document
+      allow read: if isOwner(userId);
+
+      allow create: if isOwner(userId)
+        && hasRequiredFields(['email', 'displayName', 'createdAt'])
+        && isValidString('email', 320)
+        && isValidString('displayName', 100);
+
+      allow update: if isOwner(userId)
+        // Prevent users from modifying protected fields
+        && (!request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['id', 'createdAt']));
+
+      allow delete: if false; // Users cannot delete their own accounts via client
+
+      // Daily insights subcollection
+      match /daily_insights/{insightId} {
+        allow read: if isOwner(userId);
+        allow write: if false; // Only written by Cloud Functions (Admin SDK)
+      }
+
+      // User preferences subcollection
+      match /preferences/{prefId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // ─────────────────────── IQ Questions Collection ───────────────────────
+
+    match /iq_questions/{questionId} {
+      // All authenticated users can read questions
+      allow read: if isAuthenticated();
+
+      // Only admins can write questions (seed data uses Admin SDK)
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ─────────────────────── EQ Questions Collection ───────────────────────
+
+    match /eq_questions/{questionId} {
+      // All authenticated users can read questions
+      allow read: if isAuthenticated();
+
+      // Only admins can write questions
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ─────────────────────── Test Sessions Collection ──────────────────────
+
+    match /test_sessions/{sessionId} {
+      // Users can read only their own sessions
+      allow read: if isAuthenticated()
+        && resource.data.userId == request.auth.uid;
+
+      // Users can create sessions for themselves
+      allow create: if isAuthenticated()
+        && request.resource.data.userId == request.auth.uid
+        && hasRequiredFields(['userId', 'testType', 'startedAt'])
+        && request.resource.data.testType in ['iq', 'eq'];
+
+      // Users can update their own sessions (record answers, mark complete)
+      allow update: if isAuthenticated()
+        && resource.data.userId == request.auth.uid
+        // Cannot change ownership or test type after creation
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.testType == resource.data.testType;
+
+      allow delete: if false; // Test sessions are immutable once created
+    }
+
+    // ─────────────────────── Results Collection ────────────────────────────
+
+    match /results/{resultId} {
+      // Users can read only their own results
+      allow read: if isAuthenticated()
+        && resource.data.userId == request.auth.uid;
+
+      // Results are written by Cloud Functions only (Admin SDK bypasses rules)
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ─────────────────────── Subscriptions Collection ──────────────────────
+
+    match /subscriptions/{userId} {
+      // Users can read only their own subscription
+      allow read: if isOwner(userId);
+
+      // Subscriptions are managed by Cloud Functions / RevenueCat webhooks
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ─────────────────────── Catch-all Rule ────────────────────────────────
+
+    // Deny access to any collection not explicitly defined above
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,138 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:equatable/equatable.dart';
+
+/// Represents a single IQ test question.
+class IQQuestionModel extends Equatable {
+  /// Unique question identifier.
+  final String id;
+
+  /// The question text.
+  final String question;
+
+  /// Optional image URL for visual/pattern questions.
+  final String? imageUrl;
+
+  /// List of answer choices (typically 4-6).
+  final List<String> answers;
+
+  /// Zero-based index of the correct answer in [answers].
+  final int correctAnswerIndex;
+
+  /// Difficulty level from 1 (very easy) to 5 (very hard).
+  final int difficulty;
+
+  /// IQ category: pattern, logical, math, verbal, or spatial.
+  final String category;
+
+  /// Explanation shown after the user answers.
+  final String explanation;
+
+  const IQQuestionModel({
+    required this.id,
+    required this.question,
+    this.imageUrl,
+    required this.answers,
+    required this.correctAnswerIndex,
+    required this.difficulty,
+    required this.category,
+    required this.explanation,
+  })  : assert(difficulty >= 1 && difficulty <= 5),
+        assert(correctAnswerIndex >= 0);
+
+  @override
+  List<Object?> get props => [
+        id,
+        question,
+        imageUrl,
+        answers,
+        correctAnswerIndex,
+        difficulty,
+        category,
+        explanation,
+      ];
+
+  /// Returns true if the given [answerIndex] is correct.
+  bool isCorrect(int answerIndex) => answerIndex == correctAnswerIndex;
+
+  /// The correct answer text.
+  String get correctAnswer => answers[correctAnswerIndex];
+
+  factory IQQuestionModel.fromJson(Map<String, dynamic> json) {
+    return IQQuestionModel(
+      id: json['id'] as String,
+      question: json['question'] as String,
+      imageUrl: json['imageUrl'] as String?,
+      answers: (json['answers'] as List<dynamic>)
+          .map((e) => e as String)
+          .toList(),
+      correctAnswerIndex: json['correctAnswerIndex'] as int,
+      difficulty: json['difficulty'] as int,
+      category: json['category'] as String,
+      explanation: json['explanation'] as String? ?? '',
+    );
+  }
+
+  factory IQQuestionModel.fromFirestore(
+      DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data()!;
+    return IQQuestionModel(
+      id: doc.id,
+      question: data['question'] as String,
+      imageUrl: data['imageUrl'] as String?,
+      answers: (data['answers'] as List<dynamic>)
+          .map((e) => e as String)
+          .toList(),
+      correctAnswerIndex: data['correctAnswerIndex'] as int,
+      difficulty: data['difficulty'] as int,
+      category: data['category'] as String,
+      explanation: data['explanation'] as String? ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'question': question,
+      'imageUrl': imageUrl,
+      'answers': answers,
+      'correctAnswerIndex': correctAnswerIndex,
+      'difficulty': difficulty,
+      'category': category,
+      'explanation': explanation,
+    };
+  }
+
+  Map<String, dynamic> toFirestore() {
+    return {
+      'question': question,
+      'imageUrl': imageUrl,
+      'answers': answers,
+      'correctAnswerIndex': correctAnswerIndex,
+      'difficulty': difficulty,
+      'category': category,
+      'explanation': explanation,
+    };
+  }
+
+  IQQuestionModel copyWith({
+    String? id,
+    String? question,
+    String? imageUrl,
+    List<String>? answers,
+    int? correctAnswerIndex,
+    int? difficulty,
+    String? category,
+    String? explanation,
+  }) {
+    return IQQuestionModel(
+      id: id ?? this.id,
+      question: question ?? this.question,
+      imageUrl: imageUrl ?? this.imageUrl,
+      answers: answers ?? this.answers,
+      correctAnswerIndex: correctAnswerIndex ?? this.correctAnswerIndex,
+      difficulty: difficulty ?? this.difficulty,
+      category: category ?? this.category,
+      explanation: explanation ?? this.explanation,
+    );
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "396928377391",
+    "project_id": "build-x-36c66",
+    "storage_bucket": "build-x-36c66.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:396928377391:android:70199bee71b926f6005cda",
+        "android_client_info": {
+          "package_name": "ge.grich.lumoni"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCwmeIJcyt38CsKB0Y3LFel3tq8EuOiXmg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
