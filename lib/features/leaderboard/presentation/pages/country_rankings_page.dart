@@ -156,6 +156,12 @@ class _CountryRankingsPageState extends State<CountryRankingsPage> {
                                   .read<LeaderboardFilterCubit>()
                                   .setPeriod,
                               onScopeChanged: (scope) async {
+                                if (scope == LeaderboardScopeType.friends) {
+                                  if (context.mounted) {
+                                    context.go(RoutePaths.friendRankings);
+                                  }
+                                  return;
+                                }
                                 if (scope == LeaderboardScopeType.global) {
                                   await context
                                       .read<LeaderboardFilterCubit>()

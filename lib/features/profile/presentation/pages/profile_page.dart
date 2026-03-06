@@ -184,6 +184,12 @@ class _ProfilePageState extends State<ProfilePage> {
                       subtitle: 'Name, email, password',
                       onTap: () => _showEditNameDialog(context, state),
                     ),
+                    SettingsTile(
+                      icon: Icons.people_outline_rounded,
+                      title: 'Friends',
+                      subtitle: 'Manage friends and invites',
+                      onTap: () => context.push('/friends'),
+                    ),
                     if (state.isPremium)
                       SettingsTile(
                         icon: Icons.credit_card_outlined,

@@ -212,6 +212,52 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ─────────────────────── Friendships ────────────────────────────────
+
+    match /friendships/{friendshipId} {
+      // Users can read friendships they participate in.
+      allow read: if isAuthenticated()
+        && request.auth.uid in resource.data.participants;
+
+      // Users can create a friendship request where they are the sender.
+      allow create: if isAuthenticated()
+        && request.resource.data.sender_uid == request.auth.uid
+        && request.auth.uid in request.resource.data.participants
+        && request.resource.data.status == 'pending'
+        && request.resource.data.participants.size() == 2;
+
+      // Participants can update (accept, decline, block).
+      // Cannot change participants or sender/receiver.
+      allow update: if isAuthenticated()
+        && request.auth.uid in resource.data.participants
+        && request.resource.data.participants == resource.data.participants
+        && request.resource.data.sender_uid == resource.data.sender_uid
+        && request.resource.data.receiver_uid == resource.data.receiver_uid;
+
+      // Either participant can delete (unfriend).
+      allow delete: if isAuthenticated()
+        && request.auth.uid in resource.data.participants;
+    }
+
+    // ─────────────────────── Friend Invites ──────────────────────────────
+
+    match /friend_invites/{inviteCode} {
+      // Anyone authenticated can read an invite (to redeem it).
+      allow read: if isAuthenticated();
+
+      // Only the owner can create invites for themselves.
+      allow create: if isAuthenticated()
+        && request.resource.data.owner_uid == request.auth.uid;
+
+      // Only the owner can update their invite.
+      allow update: if isAuthenticated()
+        && resource.data.owner_uid == request.auth.uid;
+
+      // Owner can delete their own invites.
+      allow delete: if isAuthenticated()
+        && resource.data.owner_uid == request.auth.uid;
+    }
+
     // ─────────────────────── Catch-all Rule ────────────────────────────────
 
     // Deny access to any collection not explicitly defined above

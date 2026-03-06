@@ -181,6 +181,8 @@ abstract final class AppConstants {
   static const String rankingFeaturesCollection = 'ranking_features';
   static const String leaderboardDirtyUsersCollection =
       'leaderboard_dirty_users';
+  static const String friendshipsCollection = 'friendships';
+  static const String friendInvitesCollection = 'friend_invites';
 
   // ──────────────────────── Hive Box Names ─────────────────────────────
   static const String preferencesBox = 'preferences';

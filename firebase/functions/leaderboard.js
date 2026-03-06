@@ -25,6 +25,7 @@ const COLLECTIONS = {
   suspiciousSessions: "suspicious_sessions",
   rankingFeatures: "ranking_features",
   leaderboardDirtyUsers: "leaderboard_dirty_users",
+  friendships: "friendships",
 };
 
 const METRICS = ["iq", "eq"];
@@ -414,6 +415,138 @@ exports.recomputeUserRank = onCall(
     };
   },
 );
+
+// ─────────────────── Friend Leaderboard (on-demand) ──────────────────────────
+
+const _friendLeaderboardCache = new Map();
+const FRIEND_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+
+exports.getFriendLeaderboard = onCall(
+  { region: "us-central1", maxInstances: 100 },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentication is required.");
+    }
+
+    const uid = request.auth.uid;
+    const data = request.data || {};
+
+    const metric = METRICS.includes(data.metric) ? data.metric : "iq";
+    const period = PERIODS.includes(data.period) ? data.period : "weekly";
+
+    // Check in-memory cache
+    const cacheKey = `${uid}_${metric}_${period}`;
+    const cached = _friendLeaderboardCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < FRIEND_CACHE_TTL_MS) {
+      return cached.result;
+    }
+
+    // Get all accepted friendships for this user
+    const friendshipSnap = await db
+      .collection(COLLECTIONS.friendships)
+      .where("participants", "array-contains", uid)
+      .where("status", "==", "accepted")
+      .limit(500)
+      .get();
+
+    const friendUids = new Set();
+    friendUids.add(uid); // Always include the caller
+
+    for (const doc of friendshipSnap.docs) {
+      const participants = doc.data().participants || [];
+      for (const p of participants) {
+        if (p !== uid) friendUids.add(p);
+      }
+    }
+
+    if (friendUids.size <= 1) {
+      const emptyResult = {
+        entries: [],
+        totalEligible: 0,
+        metric,
+        period,
+        generatedAt: new Date().toISOString(),
+      };
+      _friendLeaderboardCache.set(cacheKey, {
+        timestamp: Date.now(),
+        result: emptyResult,
+      });
+      return emptyResult;
+    }
+
+    // Load ranking_features for all friend UIDs using deterministic doc IDs
+    const allUids = [...friendUids];
+    const chunks = _chunk(allUids, 30);
+    const entries = [];
+
+    for (const chunk of chunks) {
+      const docIds = chunk.map(
+        (friendUid) => `${metric}_${period}_global_all_${friendUid}`,
+      );
+
+      const snap = await db
+        .collection(COLLECTIONS.rankingFeatures)
+        .where(FieldPath.documentId(), "in", docIds)
+        .get();
+
+      for (const doc of snap.docs) {
+        const d = doc.data() || {};
+
+        // Skip ineligible or hidden users (except the caller)
+        if (!d.eligible) continue;
+        if (d.is_visible === false && d.uid !== uid) continue;
+
+        entries.push({
+          uid: d.uid,
+          displayName: d.display_name || "Lumoni User",
+          score: _asNumber(d.rank_score),
+          countryCode: d.country_code || null,
+          validatedCount: d.validated_count || 0,
+          bestScore: _asNumber(d.best_validated_score),
+          consistency: _asNumber(d.consistency),
+          recency: _asNumber(d.recency),
+          difficulty: _asNumber(d.difficulty),
+          participation: _asNumber(d.participation),
+        });
+      }
+    }
+
+    // Rank using existing helper
+    entries.sort((a, b) => b.score - a.score);
+    const ranked = _rankEntries(entries);
+
+    const result = {
+      entries: ranked.map((e) => ({
+        uid: e.uid,
+        display_name: e.displayName,
+        rank: e.rank,
+        score: e.score,
+        percentile: e.percentile,
+        tier: e.tier,
+        country_code: e.countryCode,
+        validated_count: e.validatedCount,
+        best_score: e.bestScore,
+        consistency: e.consistency,
+        recency: e.recency,
+        difficulty: e.difficulty,
+        participation: e.participation,
+      })),
+      totalEligible: ranked.length,
+      metric,
+      period,
+      generatedAt: new Date().toISOString(),
+    };
+
+    _friendLeaderboardCache.set(cacheKey, {
+      timestamp: Date.now(),
+      result,
+    });
+
+    return result;
+  },
+);
+
+// ─────────────────── Internal helpers ────────────────────────────────────────
 
 async function _markUserDirty(uid, sessionId) {
   await db

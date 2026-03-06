@@ -12,10 +12,17 @@ import 'package:lumoni/core/services/firebase_service.dart';
 import 'package:lumoni/core/services/local_storage_service.dart';
 import 'package:lumoni/features/auth/presentation/pages/login_page.dart';
 import 'package:lumoni/features/auth/presentation/pages/splash_page.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+
 import 'package:lumoni/features/eq_test/data/repositories/eq_test_repository.dart';
 import 'package:lumoni/features/eq_test/presentation/cubits/eq_test_cubit.dart';
 import 'package:lumoni/features/eq_test/presentation/pages/eq_test_intro_page.dart';
 import 'package:lumoni/features/eq_test/presentation/pages/eq_test_page.dart';
+import 'package:lumoni/features/friends/domain/repositories/friend_repository.dart';
+import 'package:lumoni/features/friends/presentation/cubits/friend_management_cubit.dart';
+import 'package:lumoni/features/friends/presentation/cubits/friend_rankings_cubit.dart';
+import 'package:lumoni/features/friends/presentation/pages/friend_management_page.dart';
+import 'package:lumoni/features/friends/presentation/pages/friend_rankings_page.dart';
 import 'package:lumoni/features/home/presentation/cubits/home_cubit.dart';
 import 'package:lumoni/features/home/presentation/pages/home_page.dart';
 import 'package:lumoni/features/insights/presentation/cubits/insights_cubit.dart';
@@ -69,6 +76,8 @@ abstract final class RoutePaths {
   static const String results = '/results/:sessionId';
   static const String paywall = '/paywall';
   static const String shareCard = '/share-card/:sessionId';
+  static const String friends = '/friends';
+  static const String friendRankings = '/leaderboard/friends';
 }
 
 /// The global GoRouter configuration for the Lumoni app.
@@ -263,6 +272,42 @@ final GoRouter appRouter = GoRouter(
       pageBuilder: (context, state) => _slideTransitionPage(
         key: state.pageKey,
         child: const LeaderboardOnboardingPage(),
+      ),
+    ),
+
+    // ── Friends ─────────────────────────────────────────────────────
+    GoRoute(
+      path: RoutePaths.friends,
+      pageBuilder: (context, state) => _slideTransitionPage(
+        key: state.pageKey,
+        child: BlocProvider(
+          create: (_) => FriendManagementCubit(
+            repository: getIt<FriendRepository>(),
+          )..loadFriends(),
+          child: const FriendManagementPage(),
+        ),
+      ),
+    ),
+    GoRoute(
+      path: RoutePaths.friendRankings,
+      pageBuilder: (context, state) => _slideTransitionPage(
+        key: state.pageKey,
+        child: MultiBlocProvider(
+          providers: [
+            BlocProvider(
+              create: (_) => LeaderboardFilterCubit(
+                localStorage: getIt<LocalStorageService>(),
+              )..loadCachedFilter(),
+            ),
+            BlocProvider(
+              create: (_) => FriendRankingsCubit(
+                functions: FirebaseFunctions.instance,
+                authService: getIt<AuthService>(),
+              ),
+            ),
+          ],
+          child: const FriendRankingsPage(),
+        ),
       ),
     ),
 

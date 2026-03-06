@@ -8,6 +8,7 @@ import 'package:lumoni/core/constants/app_constants.dart';
 import 'package:lumoni/core/di/injection.dart';
 import 'package:lumoni/core/models/iq_question_model.dart';
 import 'package:lumoni/core/models/test_session_model.dart';
+import 'package:lumoni/core/services/auth_service.dart';
 import 'package:lumoni/core/services/local_storage_service.dart';
 import 'package:lumoni/core/services/subscription_service.dart';
 import 'package:lumoni/core/utils/iq_score_calculator.dart';
@@ -239,7 +240,13 @@ class IQTestCubit extends Cubit<IQTestState> {
 
       // Build session model
       final sessionId = const Uuid().v4();
-      final userId = _localStorage.getUserId() ?? 'anonymous';
+      final userId = getIt<AuthService>().currentUser?.uid;
+      if (userId == null) {
+        emit(const IQTestError(
+          message: 'You must be signed in to save results.',
+        ));
+        return;
+      }
 
       final session = TestSessionModel(
         id: sessionId,

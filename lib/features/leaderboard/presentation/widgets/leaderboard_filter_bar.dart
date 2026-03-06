@@ -23,6 +23,7 @@ class LeaderboardFilterBar extends StatelessWidget {
     const availableScopes = <LeaderboardScopeType>[
       LeaderboardScopeType.global,
       LeaderboardScopeType.country,
+      LeaderboardScopeType.friends,
     ];
 
     return Column(

@@ -135,6 +135,10 @@ class _LeaderboardHomePageState extends State<LeaderboardHomePage> {
                     .read<LeaderboardFilterCubit>()
                     .setPeriod,
                 onScopeChanged: (scope) async {
+                  if (scope == LeaderboardScopeType.friends) {
+                    context.push(RoutePaths.friendRankings);
+                    return;
+                  }
                   if (scope == LeaderboardScopeType.country &&
                       (filter.countryCode == null ||
                           filter.countryCode!.isEmpty)) {
@@ -171,24 +175,36 @@ class _LeaderboardHomePageState extends State<LeaderboardHomePage> {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-              child: Row(
+              child: Column(
                 children: [
-                  Expanded(
-                    child: AppButton(
-                      label: 'Global Rankings',
-                      variant: AppButtonVariant.primary,
-                      onPressed: () =>
-                          context.push(RoutePaths.leaderboardGlobal),
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: AppButton(
+                          label: 'Global Rankings',
+                          variant: AppButtonVariant.primary,
+                          onPressed: () =>
+                              context.push(RoutePaths.leaderboardGlobal),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: AppButton(
+                          label: 'Country Rankings',
+                          variant: AppButtonVariant.solid,
+                          onPressed: () =>
+                              context.push(RoutePaths.leaderboardCountry),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: AppButton(
-                      label: 'Country Rankings',
-                      variant: AppButtonVariant.solid,
-                      onPressed: () =>
-                          context.push(RoutePaths.leaderboardCountry),
-                    ),
+                  const SizedBox(height: AppSpacing.sm),
+                  AppButton(
+                    label: 'Friend Rankings',
+                    variant: AppButtonVariant.outlined,
+                    width: double.infinity,
+                    onPressed: () =>
+                        context.push(RoutePaths.friendRankings),
                   ),
                 ],
               ),
