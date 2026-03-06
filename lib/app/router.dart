@@ -9,6 +9,7 @@ import 'package:lumoni/features/auth/presentation/cubits/auth_state.dart';
 import 'package:lumoni/core/di/injection.dart';
 import 'package:lumoni/core/services/auth_service.dart';
 import 'package:lumoni/core/services/firebase_service.dart';
+import 'package:lumoni/core/services/local_storage_service.dart';
 import 'package:lumoni/features/auth/presentation/pages/login_page.dart';
 import 'package:lumoni/features/auth/presentation/pages/splash_page.dart';
 import 'package:lumoni/features/eq_test/data/repositories/eq_test_repository.dart';
@@ -22,6 +23,19 @@ import 'package:lumoni/features/insights/presentation/pages/insights_page.dart';
 import 'package:lumoni/features/iq_test/presentation/cubits/iq_test_cubit.dart';
 import 'package:lumoni/features/iq_test/presentation/pages/iq_test_intro_page.dart';
 import 'package:lumoni/features/iq_test/presentation/pages/iq_test_page.dart';
+import 'package:lumoni/features/leaderboard/domain/repositories/leaderboard_repository.dart';
+import 'package:lumoni/features/leaderboard/presentation/cubits/filter/leaderboard_filter_cubit.dart';
+import 'package:lumoni/features/leaderboard/presentation/cubits/home/leaderboard_home_cubit.dart';
+import 'package:lumoni/features/leaderboard/presentation/cubits/list/leaderboard_list_cubit.dart';
+import 'package:lumoni/features/leaderboard/presentation/cubits/privacy/leaderboard_privacy_cubit.dart';
+import 'package:lumoni/features/leaderboard/presentation/cubits/tier_badge/tier_badge_cubit.dart';
+import 'package:lumoni/features/leaderboard/presentation/cubits/user_rank/user_rank_cubit.dart';
+import 'package:lumoni/features/leaderboard/presentation/pages/badge_tier_detail_page.dart';
+import 'package:lumoni/features/leaderboard/presentation/pages/country_rankings_page.dart';
+import 'package:lumoni/features/leaderboard/presentation/pages/global_rankings_page.dart';
+import 'package:lumoni/features/leaderboard/presentation/pages/leaderboard_home_page.dart';
+import 'package:lumoni/features/leaderboard/presentation/pages/leaderboard_onboarding_page.dart';
+import 'package:lumoni/features/leaderboard/presentation/pages/user_rank_detail_page.dart';
 import 'package:lumoni/features/onboarding/presentation/cubits/onboarding_cubit.dart';
 import 'package:lumoni/features/onboarding/presentation/pages/onboarding_page.dart';
 import 'package:lumoni/features/paywall/presentation/pages/paywall_page.dart';
@@ -40,6 +54,12 @@ abstract final class RoutePaths {
   static const String onboarding = '/onboarding';
   static const String login = '/login';
   static const String home = '/home';
+  static const String leaderboardHome = '/leaderboard';
+  static const String leaderboardGlobal = '/leaderboard/global';
+  static const String leaderboardCountry = '/leaderboard/country';
+  static const String leaderboardRankDetail = '/leaderboard/rank-detail';
+  static const String leaderboardTierDetail = '/leaderboard/tier-detail';
+  static const String leaderboardOnboarding = '/leaderboard/onboarding';
   static const String insights = '/insights';
   static const String profile = '/profile';
   static const String iqTestIntro = '/iq-test/intro';
@@ -62,10 +82,8 @@ final GoRouter appRouter = GoRouter(
     // ── Splash ────────────────────────────────────────────────────────
     GoRoute(
       path: RoutePaths.splash,
-      pageBuilder: (context, state) => _fadeTransitionPage(
-        key: state.pageKey,
-        child: const SplashPage(),
-      ),
+      pageBuilder: (context, state) =>
+          _fadeTransitionPage(key: state.pageKey, child: const SplashPage()),
     ),
 
     // ── Onboarding ────────────────────────────────────────────────────
@@ -83,10 +101,8 @@ final GoRouter appRouter = GoRouter(
     // ── Login ─────────────────────────────────────────────────────────
     GoRoute(
       path: RoutePaths.login,
-      pageBuilder: (context, state) => _fadeTransitionPage(
-        key: state.pageKey,
-        child: const LoginPage(),
-      ),
+      pageBuilder: (context, state) =>
+          _fadeTransitionPage(key: state.pageKey, child: const LoginPage()),
     ),
 
     // ── Shell Route (Bottom Navigation) ───────────────────────────────
@@ -112,6 +128,34 @@ final GoRouter appRouter = GoRouter(
           ),
         ),
         GoRoute(
+          path: RoutePaths.leaderboardHome,
+          pageBuilder: (context, state) => _fadeTransitionPage(
+            key: state.pageKey,
+            child: MultiBlocProvider(
+              providers: [
+                BlocProvider(
+                  create: (_) => LeaderboardFilterCubit(
+                    localStorage: getIt<LocalStorageService>(),
+                  ),
+                ),
+                BlocProvider(
+                  create: (_) => LeaderboardHomeCubit(
+                    repository: getIt<LeaderboardRepository>(),
+                    authService: getIt<AuthService>(),
+                  ),
+                ),
+                BlocProvider(
+                  create: (_) => LeaderboardPrivacyCubit(
+                    repository: getIt<LeaderboardRepository>(),
+                    authService: getIt<AuthService>(),
+                  ),
+                ),
+              ],
+              child: const LeaderboardHomePage(),
+            ),
+          ),
+        ),
+        GoRoute(
           path: RoutePaths.insights,
           pageBuilder: (context, state) => _fadeTransitionPage(
             key: state.pageKey,
@@ -132,6 +176,94 @@ final GoRouter appRouter = GoRouter(
           ),
         ),
       ],
+    ),
+
+    // ── Leaderboard Deep Screens ─────────────────────────────────────
+    GoRoute(
+      path: RoutePaths.leaderboardGlobal,
+      pageBuilder: (context, state) => _slideTransitionPage(
+        key: state.pageKey,
+        child: MultiBlocProvider(
+          providers: [
+            BlocProvider(
+              create: (_) => LeaderboardFilterCubit(
+                localStorage: getIt<LocalStorageService>(),
+              )..loadCachedFilter(),
+            ),
+            BlocProvider(
+              create: (_) => LeaderboardListCubit(
+                repository: getIt<LeaderboardRepository>(),
+              ),
+            ),
+            BlocProvider(
+              create: (_) =>
+                  UserRankCubit(repository: getIt<LeaderboardRepository>()),
+            ),
+          ],
+          child: const GlobalRankingsPage(),
+        ),
+      ),
+    ),
+    GoRoute(
+      path: RoutePaths.leaderboardCountry,
+      pageBuilder: (context, state) => _slideTransitionPage(
+        key: state.pageKey,
+        child: MultiBlocProvider(
+          providers: [
+            BlocProvider(
+              create: (_) => LeaderboardFilterCubit(
+                localStorage: getIt<LocalStorageService>(),
+              )..loadCachedFilter(),
+            ),
+            BlocProvider(
+              create: (_) => LeaderboardListCubit(
+                repository: getIt<LeaderboardRepository>(),
+              ),
+            ),
+            BlocProvider(
+              create: (_) =>
+                  UserRankCubit(repository: getIt<LeaderboardRepository>()),
+            ),
+          ],
+          child: const CountryRankingsPage(),
+        ),
+      ),
+    ),
+    GoRoute(
+      path: RoutePaths.leaderboardRankDetail,
+      pageBuilder: (context, state) {
+        final snapshotId = state.uri.queryParameters['snapshotId'] ?? '';
+        final userId =
+            state.uri.queryParameters['uid'] ??
+            getIt<AuthService>().currentUser?.uid ??
+            '';
+        return _slideTransitionPage(
+          key: state.pageKey,
+          child: BlocProvider(
+            create: (_) =>
+                UserRankCubit(repository: getIt<LeaderboardRepository>()),
+            child: UserRankDetailPage(snapshotId: snapshotId, userId: userId),
+          ),
+        );
+      },
+    ),
+    GoRoute(
+      path: RoutePaths.leaderboardTierDetail,
+      pageBuilder: (context, state) => _slideTransitionPage(
+        key: state.pageKey,
+        child: BlocProvider(
+          create: (_) =>
+              TierBadgeCubit(repository: getIt<LeaderboardRepository>()),
+          child: const BadgeTierDetailPage(),
+        ),
+      ),
+    ),
+    GoRoute(
+      path: RoutePaths.leaderboardOnboarding,
+      pageBuilder: (context, state) => _slideTransitionPage(
+        key: state.pageKey,
+        child: const LeaderboardOnboardingPage(),
+      ),
     ),
 
     // ── IQ Test ───────────────────────────────────────────────────────
@@ -169,7 +301,8 @@ final GoRouter appRouter = GoRouter(
       pageBuilder: (context, state) => _slideTransitionPage(
         key: state.pageKey,
         child: BlocProvider(
-          create: (_) => EQTestCubit(repository: EQTestRepository())..startTest(),
+          create: (_) =>
+              EQTestCubit(repository: EQTestRepository())..startTest(),
           child: const EQTestPage(),
         ),
       ),
@@ -258,8 +391,7 @@ final GoRouter appRouter = GoRouter(
 
     // Guest mode: allow access to most routes except certain premium ones.
     if (authState is AuthGuest) {
-      if (currentPath == RoutePaths.splash ||
-          currentPath == RoutePaths.login) {
+      if (currentPath == RoutePaths.splash || currentPath == RoutePaths.login) {
         return RoutePaths.home;
       }
       return null;
@@ -267,8 +399,7 @@ final GoRouter appRouter = GoRouter(
 
     // Authenticated user on a public route: redirect to home.
     if (authState is AuthAuthenticated) {
-      if (currentPath == RoutePaths.splash ||
-          currentPath == RoutePaths.login) {
+      if (currentPath == RoutePaths.splash || currentPath == RoutePaths.login) {
         return RoutePaths.home;
       }
       return null;
@@ -377,9 +508,7 @@ class _ErrorPage extends StatelessWidget {
               onPressed: () => context.go(RoutePaths.home),
               child: Text(
                 'Go Home',
-                style: AppTypography.button.copyWith(
-                  color: AppColors.primary,
-                ),
+                style: AppTypography.button.copyWith(color: AppColors.primary),
               ),
             ),
           ],

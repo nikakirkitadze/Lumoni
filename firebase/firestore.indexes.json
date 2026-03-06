@@ -74,6 +74,73 @@
         { "fieldPath": "userId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "leaderboard_snapshots",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "metric", "order": "ASCENDING" },
+        { "fieldPath": "scope_type", "order": "ASCENDING" },
+        { "fieldPath": "scope_value", "order": "ASCENDING" },
+        { "fieldPath": "period", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "generated_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "leaderboard_snapshots",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "period", "order": "ASCENDING" },
+        { "fieldPath": "generated_at", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ranking_entries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "snapshot_id", "order": "ASCENDING" },
+        { "fieldPath": "rank", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ranking_features",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "metric", "order": "ASCENDING" },
+        { "fieldPath": "period", "order": "ASCENDING" },
+        { "fieldPath": "scope_type", "order": "ASCENDING" },
+        { "fieldPath": "scope_value", "order": "ASCENDING" },
+        { "fieldPath": "eligible", "order": "ASCENDING" },
+        { "fieldPath": "is_visible", "order": "ASCENDING" },
+        { "fieldPath": "rank_score", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "test_sessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "validation_status", "order": "ASCENDING" },
+        { "fieldPath": "validated_for_leaderboard", "order": "ASCENDING" },
+        { "fieldPath": "completedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "test_sessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "answer_hash", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "suspicious_sessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "device_hash", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

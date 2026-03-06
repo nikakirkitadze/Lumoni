@@ -15,6 +15,8 @@ const { VertexAI } = require("@google-cloud/vertexai");
 initializeApp();
 const db = getFirestore();
 
+Object.assign(exports, require("./leaderboard"));
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants (mirror of AppConstants from the Flutter app)
 // ─────────────────────────────────────────────────────────────────────────────

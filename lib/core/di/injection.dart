@@ -1,4 +1,6 @@
 import 'package:get_it/get_it.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 import 'package:lumoni/core/services/ai_question_service.dart';
 import 'package:lumoni/core/services/auth_service.dart';
@@ -11,6 +13,8 @@ import 'package:lumoni/core/utils/iq_score_calculator.dart';
 import 'package:lumoni/core/utils/question_randomizer.dart';
 import 'package:lumoni/features/iq_test/data/repositories/iq_test_repository.dart';
 import 'package:lumoni/features/eq_test/data/repositories/eq_test_repository.dart';
+import 'package:lumoni/features/leaderboard/data/repositories/firestore_leaderboard_repository.dart';
+import 'package:lumoni/features/leaderboard/domain/repositories/leaderboard_repository.dart';
 
 /// Global service locator.
 final GetIt getIt = GetIt.instance;
@@ -48,6 +52,14 @@ Future<void> configureDependencies() async {
     () => IQTestRepository(aiService: getIt<AIQuestionService>()),
   );
   getIt.registerLazySingleton<EQTestRepository>(() => EQTestRepository());
+  getIt.registerLazySingleton<LeaderboardRepository>(
+    () => FirestoreLeaderboardRepository(
+      firestore: FirebaseFirestore.instance,
+      functions: FirebaseFunctions.instance,
+      authService: getIt<AuthService>(),
+      localStorage: getIt<LocalStorageService>(),
+    ),
+  );
 
   // ─────────────────────── Utilities (singletons) ──────────────────────
 

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
@@ -12,13 +13,16 @@ import 'package:lumoni/features/eq_test/data/datasources/eq_statement_bank.dart'
 /// statement retrieval, and test-limit tracking.
 class EQTestRepository {
   final FirebaseFirestore _firestore;
+  final FirebaseFunctions _functions;
   final FirebaseAuth _auth;
 
   EQTestRepository({
     FirebaseFirestore? firestore,
+    FirebaseFunctions? functions,
     FirebaseAuth? auth,
-  })  : _firestore = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance;
+  }) : _firestore = firestore ?? FirebaseFirestore.instance,
+       _functions = functions ?? FirebaseFunctions.instance,
+       _auth = auth ?? FirebaseAuth.instance;
 
   // ────────────────────────── User ──────────────────────────────────────
 
@@ -45,7 +49,8 @@ class EQTestRepository {
       if (await _isPremiumUser()) return true;
 
       final box = await Hive.openBox(AppConstants.preferencesBox);
-      final usedTests = box.get(AppConstants.keyFreeTestsUsed, defaultValue: 0) as int;
+      final usedTests =
+          box.get(AppConstants.keyFreeTestsUsed, defaultValue: 0) as int;
       return usedTests < AppConstants.freeTestLimit;
     } catch (e) {
       debugPrint('[EQTestRepository] canTakeTest error: $e');
@@ -58,7 +63,8 @@ class EQTestRepository {
   Future<void> incrementTestCount() async {
     try {
       final box = await Hive.openBox(AppConstants.preferencesBox);
-      final current = box.get(AppConstants.keyFreeTestsUsed, defaultValue: 0) as int;
+      final current =
+          box.get(AppConstants.keyFreeTestsUsed, defaultValue: 0) as int;
       await box.put(AppConstants.keyFreeTestsUsed, current + 1);
     } catch (e) {
       debugPrint('[EQTestRepository] incrementTestCount error: $e');
@@ -95,10 +101,16 @@ class EQTestRepository {
   /// Saves a completed test session to Firestore.
   Future<void> saveTestSession(TestSessionModel session) async {
     try {
-      await _firestore
-          .collection(AppConstants.testSessionsCollection)
-          .doc(session.id)
-          .set(session.toFirestore());
+      final callable = _functions.httpsCallable('submitAssessmentResult');
+      await callable.call({
+        'sessionId': session.id,
+        'testType': session.testType.value,
+        'questionIds': session.questionIds,
+        'answers': session.answers,
+        'startedAt': session.startedAt.toIso8601String(),
+        'completedAt': (session.completedAt ?? DateTime.now())
+            .toIso8601String(),
+      });
 
       // Cache the latest EQ score locally.
       if (session.score != null) {
@@ -106,10 +118,23 @@ class EQTestRepository {
         await box.put(AppConstants.keyCachedEQScore, session.score);
       }
 
-      debugPrint('[EQTestRepository] Session ${session.id} saved successfully.');
+      debugPrint(
+        '[EQTestRepository] Session ${session.id} saved successfully.',
+      );
     } catch (e) {
-      debugPrint('[EQTestRepository] saveTestSession error: $e');
-      rethrow;
+      debugPrint(
+        '[EQTestRepository] Validation failed, saving local session fallback: $e',
+      );
+      await _firestore
+          .collection(AppConstants.testSessionsCollection)
+          .doc(session.id)
+          .set({
+            ...session.toFirestore(),
+            'validation_status': 'unverified',
+            'validated_for_leaderboard': false,
+            'updatedAt': FieldValue.serverTimestamp(),
+            'createdAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
     }
   }
 
@@ -213,8 +238,7 @@ class EQTestRepository {
       final lastTestDate = DateTime.tryParse(lastTestDateStr);
       if (lastTestDate == null) return true;
 
-      final cooldownDuration =
-          Duration(hours: AppConstants.testCooldownHours);
+      final cooldownDuration = Duration(hours: AppConstants.testCooldownHours);
       return DateTime.now().difference(lastTestDate) >= cooldownDuration;
     } catch (e) {
       debugPrint('[EQTestRepository] isCooldownElapsed error: $e');

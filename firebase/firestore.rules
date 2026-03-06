@@ -146,6 +146,72 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ─────────────────────── Leaderboard Profiles ───────────────────────
+
+    match /leaderboard_profiles/{userId} {
+      allow read: if isOwner(userId);
+
+      allow create, update: if isOwner(userId)
+        && isValidString('display_name', 24);
+
+      allow delete: if false;
+    }
+
+    // ─────────────────────── Leaderboard Snapshots ──────────────────────
+
+    match /leaderboard_snapshots/{snapshotId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if false;
+
+      match /pages/{pageId} {
+        allow read: if isAuthenticated();
+        allow write: if false;
+      }
+    }
+
+    // ─────────────────────── Ranking Entries ────────────────────────────
+
+    match /ranking_entries/{entryId} {
+      allow read: if isAuthenticated()
+        && (
+          resource.data.is_visible == true ||
+          resource.data.uid == request.auth.uid
+        );
+      allow create, update, delete: if false;
+    }
+
+    // ─────────────────────── Countries ─────────────────────────────────
+
+    match /countries/{countryCode} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ─────────────────────── User Best Scores ──────────────────────────
+
+    match /user_best_scores/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    // ─────────────────────── Suspicious Sessions ───────────────────────
+
+    match /suspicious_sessions/{sessionId} {
+      allow read: if isAdmin() ||
+        (isAuthenticated() && resource.data.uid == request.auth.uid);
+      allow create, update, delete: if false;
+    }
+
+    // ─────────────────────── Ranking Features / Dirty Queue ────────────
+
+    match /ranking_features/{docId} {
+      allow read, write: if false;
+    }
+
+    match /leaderboard_dirty_users/{docId} {
+      allow read, write: if false;
+    }
+
     // ─────────────────────── Catch-all Rule ────────────────────────────────
 
     // Deny access to any collection not explicitly defined above

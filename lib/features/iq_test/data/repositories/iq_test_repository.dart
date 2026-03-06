@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:lumoni/core/constants/app_constants.dart';
@@ -20,13 +21,16 @@ class IQTestRepository {
   IQTestRepository({
     LocalStorageService? localStorage,
     FirebaseFirestore? firestore,
+    FirebaseFunctions? functions,
     AIQuestionService? aiService,
-  })  : _localStorage = localStorage ?? getIt<LocalStorageService>(),
-        _firestore = firestore ?? FirebaseFirestore.instance,
-        _aiService = aiService;
+  }) : _localStorage = localStorage ?? getIt<LocalStorageService>(),
+       _firestore = firestore ?? FirebaseFirestore.instance,
+       _functions = functions ?? FirebaseFunctions.instance,
+       _aiService = aiService;
 
   final LocalStorageService _localStorage;
   final FirebaseFirestore _firestore;
+  final FirebaseFunctions _functions;
   final AIQuestionService? _aiService;
 
   /// Cached questions to avoid re-parsing on every call.
@@ -82,15 +86,13 @@ class IQTestRepository {
   }
 
   /// Returns questions filtered by a specific category.
-  Future<List<IQQuestionModel>> getQuestionsByCategory(
-      String category) async {
+  Future<List<IQQuestionModel>> getQuestionsByCategory(String category) async {
     final all = await getQuestions();
     return all.where((q) => q.category == category).toList();
   }
 
   /// Returns questions filtered by difficulty level.
-  Future<List<IQQuestionModel>> getQuestionsByDifficulty(
-      int difficulty) async {
+  Future<List<IQQuestionModel>> getQuestionsByDifficulty(int difficulty) async {
     final all = await getQuestions();
     return all.where((q) => q.difficulty == difficulty).toList();
   }
@@ -115,10 +117,10 @@ class IQTestRepository {
       return getQuestions();
     }
 
-    final aiTarget = (AppConstants.maxIQQuestions * AppConstants.aiQuestionRatio)
-        .round();
-    final perCategory =
-        (aiTarget / AppConstants.iqCategories.length).ceil(); // ~3 per category
+    final aiTarget =
+        (AppConstants.maxIQQuestions * AppConstants.aiQuestionRatio).round();
+    final perCategory = (aiTarget / AppConstants.iqCategories.length)
+        .ceil(); // ~3 per category
 
     final recentIds = _localStorage.getRecentQuestionIds();
     final aiQuestions = <IQQuestionModel>[];
@@ -127,7 +129,8 @@ class IQTestRepository {
     for (final category in AppConstants.iqCategories) {
       final generated = await aiService.generateQuestions(
         category: category,
-        difficulty: 3, // mid-level; QuestionRandomizer handles final distribution
+        difficulty:
+            3, // mid-level; QuestionRandomizer handles final distribution
         count: perCategory,
         excludeIds: recentIds,
       );
@@ -152,15 +155,34 @@ class IQTestRepository {
   /// Saves a completed test session to Firestore.
   Future<void> saveTestSession(TestSessionModel session) async {
     try {
+      final callable = _functions.httpsCallable('submitAssessmentResult');
+      await callable.call({
+        'sessionId': session.id,
+        'testType': session.testType.value,
+        'questionIds': session.questionIds,
+        'answers': session.answers,
+        'startedAt': session.startedAt.toIso8601String(),
+        'completedAt': (session.completedAt ?? DateTime.now())
+            .toIso8601String(),
+      });
+
+      debugPrint(
+        '[IQTestRepository] Session ${session.id} submitted for server validation.',
+      );
+    } catch (e) {
+      debugPrint(
+        '[IQTestRepository] Validation failed, saving local session fallback: $e',
+      );
       await _firestore
           .collection(AppConstants.testSessionsCollection)
           .doc(session.id)
-          .set(session.toFirestore());
-
-      debugPrint('[IQTestRepository] Session ${session.id} saved to Firestore.');
-    } catch (e) {
-      debugPrint('[IQTestRepository] Error saving session: $e');
-      rethrow;
+          .set({
+            ...session.toFirestore(),
+            'validation_status': 'unverified',
+            'validated_for_leaderboard': false,
+            'updatedAt': FieldValue.serverTimestamp(),
+            'createdAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
     }
   }
 

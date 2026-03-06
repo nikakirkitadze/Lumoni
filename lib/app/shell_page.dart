@@ -23,8 +23,9 @@ class _ShellPageState extends State<ShellPage> {
   /// Determines the current tab index from the GoRouter location.
   int _currentIndex(BuildContext context) {
     final location = GoRouterState.of(context).uri.path;
-    if (location.startsWith(RoutePaths.insights)) return 1;
-    if (location.startsWith(RoutePaths.profile)) return 2;
+    if (location.startsWith(RoutePaths.leaderboardHome)) return 1;
+    if (location.startsWith(RoutePaths.insights)) return 2;
+    if (location.startsWith(RoutePaths.profile)) return 3;
     return 0;
   }
 
@@ -33,10 +34,16 @@ class _ShellPageState extends State<ShellPage> {
     switch (index) {
       case 0:
         context.go(RoutePaths.home);
+        return;
       case 1:
-        context.go(RoutePaths.insights);
+        context.go(RoutePaths.leaderboardHome);
+        return;
       case 2:
+        context.go(RoutePaths.insights);
+        return;
+      case 3:
         context.go(RoutePaths.profile);
+        return;
     }
   }
 
@@ -56,6 +63,11 @@ class _ShellPageState extends State<ShellPage> {
             icon: Icons.home_outlined,
             activeIcon: Icons.home_rounded,
             label: 'Home',
+          ),
+          AppBottomNavItem(
+            icon: Icons.emoji_events_outlined,
+            activeIcon: Icons.emoji_events_rounded,
+            label: 'Rank',
           ),
           AppBottomNavItem(
             icon: Icons.insights_outlined,

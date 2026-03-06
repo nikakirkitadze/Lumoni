@@ -172,6 +172,15 @@ abstract final class AppConstants {
   static const String eqQuestionsCollection = 'eq_questions';
   static const String testSessionsCollection = 'test_sessions';
   static const String resultsCollection = 'results';
+  static const String leaderboardProfilesCollection = 'leaderboard_profiles';
+  static const String leaderboardSnapshotsCollection = 'leaderboard_snapshots';
+  static const String rankingEntriesCollection = 'ranking_entries';
+  static const String countriesCollection = 'countries';
+  static const String userBestScoresCollection = 'user_best_scores';
+  static const String suspiciousSessionsCollection = 'suspicious_sessions';
+  static const String rankingFeaturesCollection = 'ranking_features';
+  static const String leaderboardDirtyUsersCollection =
+      'leaderboard_dirty_users';
 
   // ──────────────────────── Hive Box Names ─────────────────────────────
   static const String preferencesBox = 'preferences';
