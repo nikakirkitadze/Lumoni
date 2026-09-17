@@ -20,6 +20,13 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.token.admin == true;
     }
 
+    /// Returns true if the caller's account has been deleted. The deletion
+    /// callable writes the tombstone before it purges, so a client still
+    /// holding a valid ID token can't write data back in behind it.
+    function isDeletedUser() {
+      return exists(/databases/$(database)/documents/deleted_users/$(request.auth.uid));
+    }
+
     /// Returns true if the request comes from a Firebase Cloud Function
     /// (using the Admin SDK, which bypasses security rules).
     /// Note: Admin SDK requests bypass rules entirely, so this is for
@@ -51,11 +58,13 @@ service cloud.firestore {
       allow read: if isOwner(userId);
 
       allow create: if isOwner(userId)
+        && !isDeletedUser()
         && hasRequiredFields(['email', 'displayName', 'createdAt'])
         && isValidString('email', 320)
         && isValidString('displayName', 100);
 
       allow update: if isOwner(userId)
+        && !isDeletedUser()
         // Prevent users from modifying protected fields
         && (!request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['id', 'createdAt']));
@@ -70,7 +79,8 @@ service cloud.firestore {
 
       // User preferences subcollection
       match /preferences/{prefId} {
-        allow read, write: if isOwner(userId);
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId) && !isDeletedUser();
       }
     }
 
@@ -109,14 +119,16 @@ service cloud.firestore {
       allow create: if isAuthenticated()
         && request.resource.data.userId == request.auth.uid
         && hasRequiredFields(['userId', 'testType', 'startedAt'])
-        && request.resource.data.testType in ['iq', 'eq'];
+        && request.resource.data.testType in ['iq', 'eq']
+        && !isDeletedUser();
 
       // Users can update their own sessions (record answers, mark complete)
       allow update: if isAuthenticated()
         && resource.data.userId == request.auth.uid
         // Cannot change ownership or test type after creation
         && request.resource.data.userId == resource.data.userId
-        && request.resource.data.testType == resource.data.testType;
+        && request.resource.data.testType == resource.data.testType
+        && !isDeletedUser();
 
       allow delete: if false; // Test sessions are immutable once created
     }
@@ -152,7 +164,8 @@ service cloud.firestore {
       allow read: if isOwner(userId);
 
       allow create, update: if isOwner(userId)
-        && isValidString('display_name', 24);
+        && isValidString('display_name', 24)
+        && !isDeletedUser();
 
       allow delete: if false;
     }
@@ -220,11 +233,17 @@ service cloud.firestore {
         && request.auth.uid in resource.data.participants;
 
       // Users can create a friendship request where they are the sender.
+      // The receiver must be the other participant, so the receiver tombstone
+      // check below applies to the account actually being added.
       allow create: if isAuthenticated()
         && request.resource.data.sender_uid == request.auth.uid
         && request.auth.uid in request.resource.data.participants
+        && request.resource.data.receiver_uid in request.resource.data.participants
+        && request.resource.data.receiver_uid != request.auth.uid
         && request.resource.data.status == 'pending'
-        && request.resource.data.participants.size() == 2;
+        && request.resource.data.participants.size() == 2
+        && !isDeletedUser()
+        && !exists(/databases/$(database)/documents/deleted_users/$(request.resource.data.receiver_uid));
 
       // Participants can update (accept, decline, block).
       // Cannot change participants or sender/receiver.
@@ -232,7 +251,8 @@ service cloud.firestore {
         && request.auth.uid in resource.data.participants
         && request.resource.data.participants == resource.data.participants
         && request.resource.data.sender_uid == resource.data.sender_uid
-        && request.resource.data.receiver_uid == resource.data.receiver_uid;
+        && request.resource.data.receiver_uid == resource.data.receiver_uid
+        && !isDeletedUser();
 
       // Either participant can delete (unfriend).
       allow delete: if isAuthenticated()
@@ -247,15 +267,24 @@ service cloud.firestore {
 
       // Only the owner can create invites for themselves.
       allow create: if isAuthenticated()
-        && request.resource.data.owner_uid == request.auth.uid;
+        && request.resource.data.owner_uid == request.auth.uid
+        && !isDeletedUser();
 
       // Only the owner can update their invite.
       allow update: if isAuthenticated()
-        && resource.data.owner_uid == request.auth.uid;
+        && resource.data.owner_uid == request.auth.uid
+        && !isDeletedUser();
 
       // Owner can delete their own invites.
       allow delete: if isAuthenticated()
         && resource.data.owner_uid == request.auth.uid;
+    }
+
+    // ─────────────────────── Deleted Users ───────────────────────────────
+
+    // Tombstones are written and read by Cloud Functions only.
+    match /deleted_users/{uid} {
+      allow read, write: if false;
     }
 
     // ─────────────────────── Catch-all Rule ────────────────────────────────

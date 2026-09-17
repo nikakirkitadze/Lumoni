@@ -10,6 +10,12 @@ const {
   getFirestore,
 } = require("firebase-admin/firestore");
 
+const {
+  isDeletedUser,
+  loadTombstonedUids,
+  excludeTombstonedEntries,
+} = require("./accountDeletion");
+
 const db = getFirestore();
 
 const COLLECTIONS = {
@@ -84,6 +90,10 @@ exports.submitAssessmentResult = onCall(
     }
 
     const uid = request.auth.uid;
+    if (await isDeletedUser(db, uid)) {
+      throw new HttpsError("permission-denied", "Account deleted.");
+    }
+
     const data = request.data || {};
 
     const testType = typeof data.testType === "string" ? data.testType : "iq";
@@ -365,6 +375,10 @@ exports.recomputeUserRank = onCall(
     }
 
     const uid = request.auth.uid;
+    if (await isDeletedUser(db, uid)) {
+      throw new HttpsError("permission-denied", "Account deleted.");
+    }
+
     const filter = request.data || {};
 
     const metric = METRICS.includes(filter.metric) ? filter.metric : "iq";
@@ -429,6 +443,10 @@ exports.getFriendLeaderboard = onCall(
     }
 
     const uid = request.auth.uid;
+    if (await isDeletedUser(db, uid)) {
+      throw new HttpsError("permission-denied", "Account deleted.");
+    }
+
     const data = request.data || {};
 
     const metric = METRICS.includes(data.metric) ? data.metric : "iq";
@@ -549,6 +567,10 @@ exports.getFriendLeaderboard = onCall(
 // ─────────────────── Internal helpers ────────────────────────────────────────
 
 async function _markUserDirty(uid, sessionId) {
+  if (await isDeletedUser(db, uid)) {
+    return;
+  }
+
   await db
     .collection(COLLECTIONS.leaderboardDirtyUsers)
     .doc(uid)
@@ -560,6 +582,10 @@ async function _markUserDirty(uid, sessionId) {
 }
 
 async function _recomputeUserFeatures(uid) {
+  if (await isDeletedUser(db, uid)) {
+    return;
+  }
+
   const profileDoc = await db
     .collection(COLLECTIONS.leaderboardProfiles)
     .doc(uid)
@@ -798,12 +824,20 @@ async function _upsertRankingFeature({
 }
 
 async function _buildSnapshotsForPeriod(period) {
+  // One tombstone read for the whole run: every scope below excludes the same
+  // deleted users. A tombstone written after this read can still reach a
+  // scope built later in the run, but the whole run fits in the 540 s timeout,
+  // so that build's generated_at lies inside the purge's deleted_at race
+  // window (accountDeletion.js) and the sweep scrubs it.
+  const tombstonedUids = await loadTombstonedUids(db, Date.now());
+
   for (const metric of METRICS) {
     await _buildSnapshotForScope({
       metric,
       period,
       scopeType: "global",
       scopeValue: "all",
+      tombstonedUids,
     });
 
     const countries = await db
@@ -817,12 +851,18 @@ async function _buildSnapshotsForPeriod(period) {
         period,
         scopeType: "country",
         scopeValue: countryDoc.id,
+        tombstonedUids,
       });
     }
   }
 }
 
-async function _buildSnapshotForScope({ metric, period, scopeType, scopeValue }) {
+/// `tombstonedUids` is the set from `loadTombstonedUids`; a caller building
+/// several scopes loads it once and passes it in, otherwise it is loaded here.
+/// Deleted users are dropped before ranks are assigned, so they never reach
+/// ranking_entries, pages or top_highlights and everyone else's ranks stay
+/// contiguous.
+async function _buildSnapshotForScope({ metric, period, scopeType, scopeValue, tombstonedUids }) {
   const now = new Date();
   const config = PERIOD_CONFIG[period];
   const windowStart = config.days === null
@@ -850,6 +890,7 @@ async function _buildSnapshotForScope({ metric, period, scopeType, scopeValue })
     period,
     scopeType,
     scopeValue,
+    tombstonedUids: tombstonedUids || await loadTombstonedUids(db, now.getTime()),
   });
 
   if (!entries.length) {
@@ -942,7 +983,7 @@ async function _buildSnapshotForScope({ metric, period, scopeType, scopeValue })
   return snapshotId;
 }
 
-async function _collectFeatureEntries({ metric, period, scopeType, scopeValue }) {
+async function _collectFeatureEntries({ metric, period, scopeType, scopeValue, tombstonedUids }) {
   const entries = [];
   let cursor = null;
 
@@ -965,9 +1006,10 @@ async function _collectFeatureEntries({ metric, period, scopeType, scopeValue })
     const snap = await query.get();
     if (snap.empty) break;
 
+    const pageEntries = [];
     for (const doc of snap.docs) {
       const data = doc.data() || {};
-      entries.push({
+      pageEntries.push({
         uid: data.uid,
         displayName: data.display_name || "Lumoni User",
         score: _asNumber(data.rank_score),
@@ -980,6 +1022,7 @@ async function _collectFeatureEntries({ metric, period, scopeType, scopeValue })
         participation: _asNumber(data.participation),
       });
     }
+    entries.push(...excludeTombstonedEntries(pageEntries, tombstonedUids));
 
     cursor = snap.docs[snap.docs.length - 1];
     if (snap.docs.length < PAGE_SIZE) {
