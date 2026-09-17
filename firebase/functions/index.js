@@ -17,6 +17,9 @@ const db = getFirestore();
 
 Object.assign(exports, require("./leaderboard"));
 
+const { deleteAccount, onAuthUserDeleted, sweepDeletedUsers, isDeletedUser } = require("./accountDeletion");
+Object.assign(exports, { deleteAccount, onAuthUserDeleted, sweepDeletedUsers });
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants (mirror of AppConstants from the Flutter app)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -67,6 +70,10 @@ exports.generateIQTest = onCall(
     // Validate authentication
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "User must be authenticated.");
+    }
+
+    if (await isDeletedUser(db, request.auth.uid)) {
+      throw new HttpsError("permission-denied", "Account deleted.");
     }
 
     const userId = request.data.userId || request.auth.uid;
@@ -366,6 +373,10 @@ exports.generateAIQuestions = onCall(
     // Auth check
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "User must be authenticated.");
+    }
+
+    if (await isDeletedUser(db, request.auth.uid)) {
+      throw new HttpsError("permission-denied", "Account deleted.");
     }
 
     const userId = request.auth.uid;
